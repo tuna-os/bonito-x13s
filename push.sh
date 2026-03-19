@@ -1,14 +1,14 @@
 #!/bin/bash
 # Build and push the bonito-x13s bootc image to a container registry.
-# Users can then subscribe with: sudo bootc switch ghcr.io/<owner>/bonito-x13s:latest
+# Users can then subscribe with: sudo bootc switch ghcr.io/hanthor/bonito-x13s:latest
 #
 # Usage:
 #   ./push.sh                                    # push to default registry
-#   REGISTRY=ghcr.io/myuser ./push.sh            # push to a custom registry
-#   REGISTRY=ghcr.io/myuser TAG=v1.0 ./push.sh   # push with a specific tag
+#   REGISTRY=ghcr.io/youruser ./push.sh            # push to a custom registry
+#   REGISTRY=ghcr.io/youruser TAG=v1.0 ./push.sh   # push with a specific tag
 set -euo pipefail
 
-REGISTRY="${REGISTRY:-ghcr.io/tuna-os}"
+REGISTRY="${REGISTRY:-ghcr.io/hanthor}"
 IMAGE_NAME="bonito-x13s"
 TAG="${TAG:-latest}"
 FULL_REF="${REGISTRY}/${IMAGE_NAME}:${TAG}"

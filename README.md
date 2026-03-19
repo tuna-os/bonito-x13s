@@ -15,7 +15,7 @@ A [bootc](https://containers.github.io/bootc/) image for the **Lenovo ThinkPad X
 If you already have a bootc-based system running on your X13s:
 
 ```bash
-sudo bootc switch ghcr.io/tuna-os/bonito-x13s:latest
+sudo bootc switch ghcr.io/hanthor/bonito-x13s:latest
 sudo reboot
 ```
 
@@ -63,14 +63,14 @@ sudo dd if=bootc-isos/output/*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ## Build and Push the bootc Image
 
 ```bash
-# Push to default registry (ghcr.io/tuna-os)
+# Push to default registry (ghcr.io/hanthor)
 ./push.sh
 
 # Push to a custom registry
-REGISTRY=ghcr.io/myuser ./push.sh
+REGISTRY=ghcr.io/youruser ./push.sh
 
 # Push with a specific tag
-REGISTRY=ghcr.io/myuser TAG=v1.0 ./push.sh
+REGISTRY=ghcr.io/youruser TAG=v1.0 ./push.sh
 ```
 
 ## Project Structure
