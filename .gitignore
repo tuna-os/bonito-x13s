@@ -1,0 +1,11 @@
+# Build artifacts
+output/
+*.iso
+
+# Build logs
+build_log*.txt
+
+# Misc text files captured during research
+pd_mapper_files.txt
+rpm_list.txt
+x13s_list.txt

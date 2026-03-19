@@ -1,0 +1,10 @@
+# Live ISO layer for bonito-x13s.
+# Layers live-boot tooling (dracut-live, EFI binaries, iso.yaml) on top of the
+# base bootc image. This image is consumed by image-builder to produce a bootable ISO.
+#
+# Build with: podman build --cap-add sys_admin --security-opt label=disable \
+#               -t bonito-x13s-installer -f Containerfile.iso .
+
+FROM localhost/bonito-x13s:latest
+
+RUN --mount=type=bind,source=src,target=/src /src/build.sh

@@ -1,0 +1,6 @@
+[submodule "bootc-isos"]
+	path = bootc-isos
+	url = https://github.com/ondrejbudai/bootc-isos
+[submodule "x13s_repo"]
+	path = x13s_repo
+	url = https://pagure.io/x13s.git

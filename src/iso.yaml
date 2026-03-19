@@ -1,0 +1,10 @@
+label: "Bonito-X13s-Live"
+grub2:
+  timeout: 10
+  entries:
+    - name: "Bonito X13s Live (GNOME)"
+      linux: "/images/pxeboot/vmlinuz arm64.nopauth clk_ignore_unused pd_ignore_unused modprobe.blacklist=qcom_q6v5_pas devicetree=/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb root=live:CDLABEL=Bonito-X13s-Live enforcing=0 rd.live.image rd.live.overlay.thin quiet"
+      initrd: "/images/pxeboot/initrd.img"
+    - name: "Bonito X13s Live (troubleshooting)"
+      linux: "/images/pxeboot/vmlinuz arm64.nopauth clk_ignore_unused pd_ignore_unused modprobe.blacklist=qcom_q6v5_pas devicetree=/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb root=live:CDLABEL=Bonito-X13s-Live enforcing=0 rd.live.image rd.shell"
+      initrd: "/images/pxeboot/initrd.img"
