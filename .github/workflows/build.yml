@@ -78,7 +78,7 @@ jobs:
             -f Containerfile.iso .
 
       - name: Clone bootc-isos
-        run: git clone https://github.com/ondrejbudai/bootc-isos bootc-isos
+        run: git clone -b fix-drop-stale-images-replace https://github.com/tuna-os/bootc-isos.git bootc-isos
 
       - name: Build image-builder
         working-directory: bootc-isos
