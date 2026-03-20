@@ -14,9 +14,11 @@ RUN dnf -y copr enable jlinton/x13s && \
 RUN echo 'install_items+=" /lib/firmware/qcom/sc8280xp/LENOVO/21BX/qcadsp8280.mbn.xz /lib/firmware/qcom/sc8280xp/LENOVO/21BX/qcdxkmsuc8280.mbn.xz /lib/firmware/qcom/sc8280xp/LENOVO/21BX/qccdsp8280.mbn.xz /lib/firmware/qcom/sc8280xp/LENOVO/21BX/qcslpi8280.mbn.xz "' > /etc/dracut.conf.d/x13s.conf
 
 # Rebuild the initramfs targeting the container's kernel (not the build host kernel).
-# The previous `dracut -f || true` silently failed when building on x86_64/WSL2.
-RUN kernel=$(ls /usr/lib/modules/ | head -1) && \
-    dracut --force --zstd --no-hostonly \
+# mkdir -p "$(realpath /root)" avoids dracut-install failure when /root is a symlink.
+# DRACUT_NO_XATTR=1 avoids xattr errors in container builds.
+RUN mkdir -p "$(realpath /root)" && \
+    kernel=$(ls /usr/lib/modules/ | head -1) && \
+    DRACUT_NO_XATTR=1 dracut --force --zstd --no-hostonly \
         "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}" || true
 
 # Kernel arguments required for X13s boot stability
