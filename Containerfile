@@ -1,5 +1,5 @@
 # Base bootc image for the Lenovo ThinkPad X13s (aarch64, Qualcomm SC8280XP).
-# This is the publishable image — users subscribe via: bootc switch ghcr.io/hanthor/bonito-x13s:latest
+# This is the publishable image — users subscribe via: bootc switch ghcr.io/tuna-os/bonito-x13s:latest
 # For building a live ISO, see Containerfile.iso which layers on top of this.
 
 FROM ghcr.io/tuna-os/bonito:gnome

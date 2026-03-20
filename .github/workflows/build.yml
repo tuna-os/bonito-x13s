@@ -1,4 +1,4 @@
-name: Build and Push bootc Image
+name: Build, Push, and Release
 
 on:
   push:
@@ -8,8 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_REF: ghcr.io/tuna-os/bonito-x13s
 
 jobs:
   build:
@@ -34,12 +33,68 @@ jobs:
       - name: Build base bootc image
         run: |
           podman build --platform linux/arm64 \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -t ${{ env.IMAGE_REF }}:latest \
+            -t ${{ env.IMAGE_REF }}:${{ github.sha }} \
             -f Containerfile .
 
       - name: Push to GHCR
         if: github.event_name != 'pull_request'
         run: |
-          podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          podman push ${{ env.IMAGE_REF }}:latest
+          podman push ${{ env.IMAGE_REF }}:${{ github.sha }}
+
+  build-iso:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (for aarch64 cross-build)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install just and rclone
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+          sudo apt-get install -y rclone golang
+
+      - name: Build base bootc image (for ISO pipeline)
+        run: |
+          sudo podman build --platform linux/arm64 \
+            -t localhost/bonito-x13s:latest \
+            -f Containerfile .
+
+      - name: Build ISO installer image
+        run: |
+          sudo podman build --platform linux/arm64 \
+            --cap-add sys_admin --security-opt label=disable \
+            -t localhost/bonito-x13s-installer:latest \
+            -f Containerfile.iso .
+
+      - name: Clone bootc-isos
+        run: git clone https://github.com/ondrejbudai/bootc-isos bootc-isos
+
+      - name: Build image-builder
+        working-directory: bootc-isos
+        run: sudo just build-image-builder
+
+      - name: Build ISO
+        working-directory: bootc-isos
+        run: sudo just iso-in-container localhost/bonito-x13s-installer:latest
+
+      - name: Upload ISO to Cloudflare R2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          iso=$(ls bootc-isos/output/*.iso | head -1)
+          rclone copyto "$iso" "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-latest.iso" --progress

@@ -2,6 +2,12 @@
 
 A [bootc](https://containers.github.io/bootc/) image for the **Lenovo ThinkPad X13s** (Qualcomm SC8280XP, aarch64), based on [Bonito](https://github.com/tuna-os/bonito) (Fedora Atomic GNOME).
 
+## Download Live ISO
+
+> **[⬇ Download bonito-x13s-latest.iso](https://download.tuna.org/bonito-x13s/bonito-x13s-latest.iso)**
+
+The ISO is rebuilt automatically on every push to `main`. Write it to a USB stick and boot to install or try the live desktop.
+
 ## What's Included
 
 - ThinkPad X13s hardware support via [jlinton/x13s COPR](https://copr.fedorainfracloud.org/coprs/jlinton/x13s/)
@@ -15,7 +21,7 @@ A [bootc](https://containers.github.io/bootc/) image for the **Lenovo ThinkPad X
 If you already have a bootc-based system running on your X13s:
 
 ```bash
-sudo bootc switch ghcr.io/hanthor/bonito-x13s:latest
+sudo bootc switch ghcr.io/tuna-os/bonito-x13s:latest
 sudo reboot
 ```
 
@@ -63,7 +69,7 @@ sudo dd if=bootc-isos/output/*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ## Build and Push the bootc Image
 
 ```bash
-# Push to default registry (ghcr.io/hanthor)
+# Push to default registry (ghcr.io/tuna-os)
 ./push.sh
 
 # Push to a custom registry
