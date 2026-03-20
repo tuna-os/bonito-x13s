@@ -44,6 +44,18 @@ dnf install -y xorriso isomd5sum squashfs-tools
 mkdir -p /usr/lib/bootc-image-builder
 cp "$SCRIPT_DIR/iso.yaml" /usr/lib/bootc-image-builder/iso.yaml
 
+# Copy X13s DTB to the location expected by GRUB boot entries
+# The DTB is provided by the linux-firmware package in /lib/firmware/qcom/
+# We need to make it available at /dtb/qcom/ so GRUB can find it
+mkdir -p /dtb/qcom
+if [ -f /lib/firmware/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb ]; then
+    cp /lib/firmware/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb /dtb/qcom/
+elif [ -f /usr/lib/firmware/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb ]; then
+    cp /usr/lib/firmware/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb /dtb/qcom/
+else
+    echo "WARNING: X13s DTB not found in firmware paths"
+fi
+
 # Set timezone to UTC for the live session
 rm -f /etc/localtime
 systemd-firstboot --timezone UTC

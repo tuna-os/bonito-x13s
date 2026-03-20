@@ -28,3 +28,10 @@ RUN mkdir -p /usr/lib/bootc/kargs.d && \
 
 # GRUB DTB hint (fallback for systems that don't parse bootc kargs)
 RUN echo 'GRUB_DEFAULT_DTB="/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"' >> /etc/default/grub
+
+# Copy X13s DTB to the location expected by bootc images and ISO builders
+# The DTB is provided by the qcom-firmware package at /lib/firmware/qcom/
+# We copy it to /dtb/qcom/ so it's available for both bootc and live ISO boot
+RUN mkdir -p /dtb/qcom && \
+    cp /lib/firmware/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb /dtb/qcom/ && \
+    chmod 644 /dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb
