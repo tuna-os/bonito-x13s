@@ -86,7 +86,7 @@ jobs:
           RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
-          iso=$(ls bootc-isos/output/*.iso | head -1)
+          iso=$(sudo ls bootc-isos/output/*.iso | head -1)
           # Rename to consistent name for download link
-          mv "$iso" "bootc-isos/output/bonito-x13s-latest.iso"
+          sudo mv "$iso" "bootc-isos/output/bonito-x13s-latest.iso"
           rclone copyto "bootc-isos/output/bonito-x13s-latest.iso" "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-latest.iso" --progress
