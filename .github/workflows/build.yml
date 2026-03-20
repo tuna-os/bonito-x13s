@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -21,18 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (for aarch64 cross-build)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io --username ${{ github.actor }} --password-stdin
 
       - name: Build base bootc image
         run: |
-          podman build --platform linux/arm64 \
+          podman build \
             -t ${{ env.IMAGE_REF }}:latest \
             -t ${{ env.IMAGE_REF }}:${{ github.sha }} \
             -f Containerfile .
@@ -44,7 +39,7 @@ jobs:
           podman push ${{ env.IMAGE_REF }}:${{ github.sha }}
 
   build-iso:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: build
     if: github.event_name != 'pull_request'
     permissions:
@@ -54,11 +49,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (for aarch64 cross-build)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Install just and rclone
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
@@ -66,13 +56,13 @@ jobs:
 
       - name: Build base bootc image (for ISO pipeline)
         run: |
-          sudo podman build --platform linux/arm64 \
+          sudo podman build \
             -t localhost/bonito-x13s:latest \
             -f Containerfile .
 
       - name: Build ISO installer image
         run: |
-          sudo podman build --platform linux/arm64 \
+          sudo podman build \
             --cap-add sys_admin --security-opt label=disable \
             -t localhost/bonito-x13s-installer:latest \
             -f Containerfile.iso .
