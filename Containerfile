@@ -23,15 +23,8 @@ RUN mkdir -p "$(realpath /root)" && \
 
 # Kernel arguments required for X13s boot stability
 RUN mkdir -p /usr/lib/bootc/kargs.d && \
-    echo 'kargs = ["arm64.nopauth", "clk_ignore_unused", "pd_ignore_unused", "modprobe.blacklist=qcom_q6v5_pas", "devicetree=/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"]' \
+    echo 'kargs = ["arm64.nopauth", "clk_ignore_unused", "pd_ignore_unused", "modprobe.blacklist=qcom_q6v5_pas"]' \
     > /usr/lib/bootc/kargs.d/01-x13s.toml
 
 # GRUB DTB hint (fallback for systems that don't parse bootc kargs)
 RUN echo 'GRUB_DEFAULT_DTB="/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"' >> /etc/default/grub
-
-# Copy X13s DTB to the location expected by bootc images and ISO builders
-# The DTB is provided by the qcom-firmware package at /lib/firmware/qcom/
-# We copy it to /dtb/qcom/ so it's available for both bootc and live ISO boot
-RUN mkdir -p /dtb/qcom && \
-    cp /lib/firmware/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb /dtb/qcom/ && \
-    chmod 644 /dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb
