@@ -76,7 +76,7 @@ jobs:
 
       - name: Build ISO
         working-directory: bootc-isos
-        run: sudo just iso-in-container localhost/bonito-x13s-installer:latest
+        run: sudo just iso-in-container bonito-x13s
 
       - name: Upload ISO to Cloudflare R2
         env:
