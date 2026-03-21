@@ -25,11 +25,11 @@ jobs:
             iso_name: bonito-x13s-latest.iso
             iso_label: Bonito-X13s-Live
 
-          - name: ubuntu
-            base_image: ghcr.io/bootcrew/ubuntu-bootc:latest
-            image_ref: ghcr.io/tuna-os/ubuntu-x13s
-            iso_name: ubuntu-x13s-latest.iso
-            iso_label: Ubuntu-X13s-Live
+          - name: debian
+            base_image: ghcr.io/bootcrew/debian-bootc:latest
+            image_ref: ghcr.io/tuna-os/debian-x13s
+            iso_name: debian-x13s-latest.iso
+            iso_label: Debian-X13s-Live
 
     steps:
       - name: Checkout

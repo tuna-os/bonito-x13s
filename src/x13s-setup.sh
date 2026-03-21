@@ -24,9 +24,7 @@ if command -v dnf &>/dev/null; then
 
 elif command -v apt-get &>/dev/null; then
     echo "--- Package manager: apt (Debian/Ubuntu) ---"
-    # ubuntu-bootc has an incomplete dpkg database (ostree-based image).
-    # Pre-stub base-files as "installed" so apt-get doesn't try to run its
-    # postinst, which calls mkdir on directories that already exist.
+    # Ensure /var dpkg dirs exist (some bootc base images have empty /var at build time)
     mkdir -p \
         /var/lib/apt/lists/partial \
         /var/lib/dpkg/updates \
@@ -34,22 +32,19 @@ elif command -v apt-get &>/dev/null; then
         /var/lib/dpkg/alternatives \
         /var/cache/apt/archives/partial \
         /var/log/apt
-    touch /var/lib/dpkg/status /var/lib/dpkg/available
-    if ! dpkg-query -W base-files >/dev/null 2>&1; then
-        printf 'Package: base-files\nStatus: install ok installed\nVersion: 9999\nArchitecture: arm64\nDescription: stub\n\n' \
-            >> /var/lib/dpkg/status
-    fi
+    [ -f /var/lib/dpkg/status ]    || touch /var/lib/dpkg/status
+    [ -f /var/lib/dpkg/available ] || touch /var/lib/dpkg/available
     apt-get update -y
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         -o Dpkg::Options::="--force-confold" \
+        -o Dpkg::Options::="--force-overwrite" \
         bluez dracut-core
     apt-get clean -y
 
-    # Ubuntu's dracut lacks dmsquash-live — fetch just that module from upstream
+    # Debian/Ubuntu dracut may lack dmsquash-live — fetch from upstream if needed
     if [ ! -d /usr/lib/dracut/modules.d/90dmsquash-live ]; then
         echo "Fetching dmsquash-live from dracut-ng..."
-        mkdir -p /var/lib/apt/lists/partial /var/cache/apt/archives/partial
-        apt-get install -y git
+        DEBIAN_FRONTEND=noninteractive apt-get install -y git
         git clone --depth=1 --filter=blob:none --sparse \
             https://github.com/dracut-ng/dracut-ng.git /tmp/dracut-ng
         cd /tmp/dracut-ng
