@@ -23,7 +23,7 @@ RUN mkdir -p "$(realpath /root)" && \
 
 # Kernel arguments required for X13s boot stability
 RUN mkdir -p /usr/lib/bootc/kargs.d && \
-    echo 'kargs = ["arm64.nopauth", "clk_ignore_unused", "pd_ignore_unused", "modprobe.blacklist=qcom_q6v5_pas"]' \
+    echo 'kargs = ["arm64.nopauth", "clk_ignore_unused", "pd_ignore_unused", "modprobe.blacklist=qcom_q6v5_pas", "devicetree=/boot/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"]' \
     > /usr/lib/bootc/kargs.d/01-x13s.toml
 
 # GRUB DTB hint (fallback for systems that don't parse bootc kargs)

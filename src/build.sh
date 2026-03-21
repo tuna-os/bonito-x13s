@@ -44,6 +44,22 @@ dnf install -y xorriso isomd5sum squashfs-tools
 mkdir -p /usr/lib/bootc-image-builder
 cp "$SCRIPT_DIR/iso.yaml" /usr/lib/bootc-image-builder/iso.yaml
 
+# Copy X13s DTB to a GRUB-accessible location in the ISO.
+# GRUB runs before the squashfs is mounted, so the DTB must be in the ISO's
+# raw filesystem. image-builder copies /boot/dtb/ into the ISO tree alongside
+# the kernel, making it available to GRUB as /images/pxeboot/../dtb/...
+# We place the DTB at /boot/dtb/qcom/ which lands at /dtb/qcom/ in the ISO.
+kernel=$(ls /usr/lib/modules/ | head -1)
+DTB_SRC="/usr/lib/modules/${kernel}/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"
+if [ -f "${DTB_SRC}" ]; then
+    mkdir -p /boot/dtb/qcom
+    cp "${DTB_SRC}" /boot/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb
+    echo "DTB copied from kernel modules: ${DTB_SRC}"
+else
+    echo "ERROR: X13s DTB not found at ${DTB_SRC}"
+    find /usr/lib/modules/${kernel}/dtb -name "*sc8280xp*" 2>/dev/null || true
+fi
+
 # Set timezone to UTC for the live session
 rm -f /etc/localtime
 systemd-firstboot --timezone UTC
