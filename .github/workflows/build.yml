@@ -78,6 +78,93 @@ jobs:
         working-directory: bootc-isos
         run: sudo just iso-in-container bonito-x13s
 
+      - name: Post-process ISO (inject X13s DTB, add GRUB devicetree)
+        run: |
+          set -euo pipefail
+          ISO=$(sudo ls bootc-isos/output/*.iso | head -1)
+          echo "=== Input ISO: $ISO ($(sudo du -sh "$ISO" | cut -f1)) ==="
+
+          sudo apt-get install -y -q xorriso
+
+          # Extract DTB from the base container (already built locally)
+          KERNEL=$(sudo podman run --rm localhost/bonito-x13s:latest \
+            sh -c 'ls /usr/lib/modules/ | sort -V | tail -1')
+          echo "Kernel: $KERNEL"
+          DTB_SRC="/usr/lib/modules/${KERNEL}/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"
+
+          if ! sudo podman run --rm localhost/bonito-x13s:latest test -f "$DTB_SRC"; then
+            echo "ERROR: DTB not found at $DTB_SRC — searching container..."
+            sudo podman run --rm localhost/bonito-x13s:latest \
+              find /usr/lib/modules -name "*sc8280xp*" 2>/dev/null || true
+            exit 1
+          fi
+          sudo podman run --rm localhost/bonito-x13s:latest cat "$DTB_SRC" > /tmp/x13s.dtb
+          echo "DTB: $(ls -lh /tmp/x13s.dtb)"
+
+          # Mount ISO to examine structure and extract grub.cfg
+          MOUNT=$(mktemp -d)
+          sudo mount -o loop,ro "$ISO" "$MOUNT"
+
+          echo "=== ISO root layout ==="
+          find "$MOUNT" -maxdepth 3
+
+          echo "=== ISO root grub.cfg ==="
+          cat "$MOUNT/EFI/BOOT/grub.cfg" 2>/dev/null || echo "(not found)"
+          cp "$MOUNT/EFI/BOOT/grub.cfg" /tmp/grub-original.cfg 2>/dev/null || \
+            { echo "ERROR: no grub.cfg on ISO root"; sudo umount "$MOUNT"; exit 1; }
+
+          # Check what GRUB reads inside efiboot.img
+          if [ -f "$MOUNT/images/efiboot.img" ]; then
+            EFI_MOUNT=$(mktemp -d)
+            sudo mount -o loop,ro "$MOUNT/images/efiboot.img" "$EFI_MOUNT"
+            echo "=== efiboot.img layout ==="
+            find "$EFI_MOUNT"
+            echo "=== efiboot.img grub.cfg (stub that searches the ISO) ==="
+            cat "$EFI_MOUNT/EFI/BOOT/grub.cfg" 2>/dev/null || echo "(no grub.cfg in efiboot.img)"
+            sudo umount "$EFI_MOUNT"
+            rmdir "$EFI_MOUNT"
+          fi
+
+          sudo umount "$MOUNT"
+          rmdir "$MOUNT"
+
+          # Patch grub.cfg: insert 'devicetree' command after each 'initrd' line.
+          # GRUB's 'devicetree' command (unlike the kernel cmdline param) actually
+          # loads the DTB from the ISO filesystem and passes it to the kernel.
+          python3 - << 'PYEOF'
+          import re, sys
+          content = open('/tmp/grub-original.cfg').read()
+          print("=== BEFORE ===")
+          print(content)
+          patched = re.sub(
+              r'^(\s+)(initrd\s+\S+.*)$',
+              lambda m: m.group(0) + '\n' + m.group(1) + 'devicetree /dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb',
+              content,
+              flags=re.MULTILINE
+          )
+          print("=== AFTER ===")
+          print(patched)
+          open('/tmp/grub-patched.cfg', 'w').write(patched)
+          PYEOF
+
+          # Create modified ISO:
+          #   -boot_image any replay  — preserves El Torito boot catalog from input
+          #   -update                 — replaces grub.cfg on ISO root
+          #   -add (with -pathspecs)  — injects DTB into ISO root at /dtb/qcom/
+          sudo xorriso \
+            -indev "$ISO" \
+            -outdev /tmp/bonito-x13s-latest.iso \
+            -boot_image any replay \
+            -update /tmp/grub-patched.cfg /EFI/BOOT/grub.cfg \
+            -pathspecs on \
+            -add /tmp/x13s.dtb=/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb \
+            --
+
+          echo "=== Modified ISO: $(ls -lh /tmp/bonito-x13s-latest.iso) ==="
+          sudo rm "$ISO"
+          sudo mv /tmp/bonito-x13s-latest.iso "$(dirname "$ISO")/bonito-x13s-latest.iso"
+          sudo ls -lh "$(dirname "$ISO")/"
+
       - name: Upload ISO to Cloudflare R2
         env:
           RCLONE_CONFIG_R2_TYPE: s3
