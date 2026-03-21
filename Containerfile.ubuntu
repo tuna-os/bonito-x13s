@@ -10,7 +10,8 @@ RUN --mount=type=tmpfs,dst=/tmp \
     mkdir -p /var/lib/apt/lists/partial \
              /var/lib/dpkg/updates \
              /var/lib/dpkg/info \
-             /var/lib/dpkg/alternatives && \
+             /var/lib/dpkg/alternatives \
+             /var/cache/apt/archives/partial && \
     touch /var/lib/dpkg/status /var/lib/dpkg/available && \
     apt update -y && \
     apt install -y bluez && \
@@ -22,7 +23,8 @@ RUN --mount=type=tmpfs,dst=/tmp \
     mkdir -p /var/lib/apt/lists/partial \
              /var/lib/dpkg/updates \
              /var/lib/dpkg/info \
-             /var/lib/dpkg/alternatives && \
+             /var/lib/dpkg/alternatives \
+             /var/cache/apt/archives/partial && \
     touch /var/lib/dpkg/status /var/lib/dpkg/available && \
     apt update -y && apt install -y git && \
     git clone --depth=1 --filter=blob:none --sparse \

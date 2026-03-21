@@ -69,6 +69,7 @@ jobs:
 
       - name: Build systemd-boot ISO
         run: |
+          mkdir -p output
           sudo src/make-systemd-boot-iso.sh \
             localhost/bonito-x13s-installer:latest \
             output/bonito-x13s-latest.iso
@@ -127,6 +128,7 @@ jobs:
 
       - name: Build systemd-boot ISO (Ubuntu)
         run: |
+          mkdir -p output
           sudo src/make-systemd-boot-iso.sh \
             localhost/bonito-x13s-ubuntu:latest \
             output/bonito-x13s-ubuntu-latest.iso
