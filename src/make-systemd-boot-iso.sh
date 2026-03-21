@@ -76,7 +76,7 @@ ls -lh "$WORKDIR/boot/"
 echo "=== Exporting container rootfs ==="
 ROOTFS="$WORKDIR/rootfs"
 mkdir -p "$ROOTFS"
-CONTAINER=$(podman create "$IMAGE")
+CONTAINER=$(podman create "$IMAGE" /bin/sh)
 podman export "$CONTAINER" | tar -C "$ROOTFS" -xf -
 podman rm "$CONTAINER"
 

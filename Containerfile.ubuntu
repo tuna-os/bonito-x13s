@@ -7,7 +7,11 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Install X13s support packages
 RUN --mount=type=tmpfs,dst=/tmp \
-    mkdir -p /var/lib/apt/lists/partial && \
+    mkdir -p /var/lib/apt/lists/partial \
+             /var/lib/dpkg/updates \
+             /var/lib/dpkg/info \
+             /var/lib/dpkg/alternatives && \
+    touch /var/lib/dpkg/status /var/lib/dpkg/available && \
     apt update -y && \
     apt install -y bluez && \
     apt clean -y
@@ -15,7 +19,11 @@ RUN --mount=type=tmpfs,dst=/tmp \
 # Add dmsquash-live dracut module for live ISO boot.
 # Ubuntu's dracut package doesn't include live modules — fetch from upstream.
 RUN --mount=type=tmpfs,dst=/tmp \
-    mkdir -p /var/lib/apt/lists/partial && \
+    mkdir -p /var/lib/apt/lists/partial \
+             /var/lib/dpkg/updates \
+             /var/lib/dpkg/info \
+             /var/lib/dpkg/alternatives && \
+    touch /var/lib/dpkg/status /var/lib/dpkg/available && \
     apt update -y && apt install -y git && \
     git clone --depth=1 --filter=blob:none --sparse \
         https://github.com/dracut-ng/dracut-ng.git /tmp/dracut-ng && \
