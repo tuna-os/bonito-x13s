@@ -49,120 +49,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install just and rclone
+      - name: Install ISO build dependencies
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
-          sudo apt-get install -y rclone golang
+          sudo apt-get update -q
+          sudo apt-get install -y -q squashfs-tools mtools dosfstools xorriso rclone
 
-      - name: Build base bootc image (for ISO pipeline)
+      - name: Build base bootc image
         run: |
           sudo podman build \
             -t localhost/bonito-x13s:latest \
             -f Containerfile .
 
-      - name: Build ISO installer image
+      - name: Build ISO installer image (adds dracut-live initramfs)
         run: |
           sudo podman build \
             --cap-add sys_admin --security-opt label=disable \
             -t localhost/bonito-x13s-installer:latest \
             -f Containerfile.iso .
 
-      - name: Clone bootc-isos
-        run: git clone -b fix-drop-stale-images-replace https://github.com/tuna-os/bootc-isos.git bootc-isos
-
-      - name: Build image-builder
-        working-directory: bootc-isos
-        run: sudo just build-image-builder
-
-      - name: Build ISO
-        working-directory: bootc-isos
-        run: sudo just iso-in-container bonito-x13s
-
-      - name: Post-process ISO (inject X13s DTB, add GRUB devicetree)
+      - name: Build systemd-boot ISO
         run: |
-          set -euo pipefail
-          ISO=$(sudo ls bootc-isos/output/*.iso | head -1)
-          echo "=== Input ISO: $ISO ($(sudo du -sh "$ISO" | cut -f1)) ==="
+          sudo src/make-systemd-boot-iso.sh \
+            localhost/bonito-x13s-installer:latest \
+            output/bonito-x13s-latest.iso
 
-          sudo apt-get install -y -q xorriso
-
-          # Extract DTB from the base container (already built locally)
-          KERNEL=$(sudo podman run --rm localhost/bonito-x13s:latest \
-            sh -c 'ls /usr/lib/modules/ | sort -V | tail -1')
-          echo "Kernel: $KERNEL"
-          DTB_SRC="/usr/lib/modules/${KERNEL}/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb"
-
-          if ! sudo podman run --rm localhost/bonito-x13s:latest test -f "$DTB_SRC"; then
-            echo "ERROR: DTB not found at $DTB_SRC — searching container..."
-            sudo podman run --rm localhost/bonito-x13s:latest \
-              find /usr/lib/modules -name "*sc8280xp*" 2>/dev/null || true
-            exit 1
-          fi
-          sudo podman run --rm localhost/bonito-x13s:latest cat "$DTB_SRC" > /tmp/x13s.dtb
-          echo "DTB: $(ls -lh /tmp/x13s.dtb)"
-
-          # Mount ISO to examine structure and extract grub.cfg
+      - name: Verify ISO contents
+        run: |
           MOUNT=$(mktemp -d)
-          sudo mount -o loop,ro "$ISO" "$MOUNT"
-
-          echo "=== ISO root layout ==="
-          find "$MOUNT" -maxdepth 3
-
-          echo "=== ISO root grub.cfg ==="
-          cat "$MOUNT/EFI/BOOT/grub.cfg" 2>/dev/null || echo "(not found)"
-          cp "$MOUNT/EFI/BOOT/grub.cfg" /tmp/grub-original.cfg 2>/dev/null || \
-            { echo "ERROR: no grub.cfg on ISO root"; sudo umount "$MOUNT"; exit 1; }
-
-          # Check what GRUB reads inside efiboot.img
-          if [ -f "$MOUNT/images/efiboot.img" ]; then
-            EFI_MOUNT=$(mktemp -d)
-            sudo mount -o loop,ro "$MOUNT/images/efiboot.img" "$EFI_MOUNT"
-            echo "=== efiboot.img layout ==="
-            find "$EFI_MOUNT"
-            echo "=== efiboot.img grub.cfg (stub that searches the ISO) ==="
-            cat "$EFI_MOUNT/EFI/BOOT/grub.cfg" 2>/dev/null || echo "(no grub.cfg in efiboot.img)"
-            sudo umount "$EFI_MOUNT"
-            rmdir "$EFI_MOUNT"
-          fi
-
+          sudo mount -o loop,ro output/bonito-x13s-latest.iso "$MOUNT"
+          echo "=== ISO root ==="
+          find "$MOUNT" -maxdepth 3 -not -path "*/LiveOS/*"
+          echo "=== Loader config ==="
+          cat "$MOUNT/loader/loader.conf" 2>/dev/null || echo "(none)"
+          echo "=== Boot entry ==="
+          cat "$MOUNT/loader/entries/bonito-x13s.conf" 2>/dev/null || echo "(none)"
+          echo "=== DTB present ==="
+          find "$MOUNT" -name "*.dtb" 2>/dev/null
+          echo "=== Boot files ==="
+          ls -lh "$MOUNT/boot/aarch64/" 2>/dev/null || echo "(none)"
+          echo "=== Squashfs ==="
+          ls -lh "$MOUNT/LiveOS/" 2>/dev/null || echo "(none)"
           sudo umount "$MOUNT"
           rmdir "$MOUNT"
-
-          # Patch grub.cfg: insert 'devicetree' command after each 'initrd' line.
-          # GRUB's 'devicetree' command (unlike the kernel cmdline param) actually
-          # loads the DTB from the ISO filesystem and passes it to the kernel.
-          python3 - << 'PYEOF'
-          import re, sys
-          content = open('/tmp/grub-original.cfg').read()
-          print("=== BEFORE ===")
-          print(content)
-          patched = re.sub(
-              r'^(\s+)(initrd\s+\S+.*)$',
-              lambda m: m.group(0) + '\n' + m.group(1) + 'devicetree /dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb',
-              content,
-              flags=re.MULTILINE
-          )
-          print("=== AFTER ===")
-          print(patched)
-          open('/tmp/grub-patched.cfg', 'w').write(patched)
-          PYEOF
-
-          # Create modified ISO:
-          #   -boot_image any replay  — preserves El Torito boot catalog from input
-          #   -update                 — replaces grub.cfg on ISO root
-          #   -map                    — injects DTB into ISO root at /dtb/qcom/
-          sudo xorriso \
-            -indev "$ISO" \
-            -outdev /tmp/bonito-x13s-latest.iso \
-            -boot_image any replay \
-            -update /tmp/grub-patched.cfg /EFI/BOOT/grub.cfg \
-            -map /tmp/x13s.dtb /dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb \
-            --
-
-          echo "=== Modified ISO: $(ls -lh /tmp/bonito-x13s-latest.iso) ==="
-          sudo rm "$ISO"
-          sudo mv /tmp/bonito-x13s-latest.iso "$(dirname "$ISO")/bonito-x13s-latest.iso"
-          sudo ls -lh "$(dirname "$ISO")/"
 
       - name: Upload ISO to Cloudflare R2
         env:
@@ -172,5 +100,44 @@ jobs:
           RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
-          iso=$(sudo ls bootc-isos/output/*.iso | head -1)
-          rclone copyto "$iso" "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-latest.iso" --progress
+          rclone copyto "output/bonito-x13s-latest.iso" \
+            "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-latest.iso" --progress
+
+  build-ubuntu-iso:
+    runs-on: ubuntu-24.04-arm
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ISO build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q squashfs-tools mtools dosfstools xorriso rclone
+
+      - name: Build Ubuntu bootc image for X13s
+        run: |
+          sudo podman build \
+            --cap-add sys_admin --security-opt label=disable \
+            -t localhost/bonito-x13s-ubuntu:latest \
+            -f Containerfile.ubuntu .
+
+      - name: Build systemd-boot ISO (Ubuntu)
+        run: |
+          sudo src/make-systemd-boot-iso.sh \
+            localhost/bonito-x13s-ubuntu:latest \
+            output/bonito-x13s-ubuntu-latest.iso
+
+      - name: Upload Ubuntu ISO to Cloudflare R2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          rclone copyto "output/bonito-x13s-ubuntu-latest.iso" \
+            "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-ubuntu-latest.iso" --progress

@@ -1,0 +1,41 @@
+# Ubuntu-based bootc image for the Lenovo ThinkPad X13s (aarch64).
+# Parallel experiment alongside the Fedora-based Containerfile.
+
+FROM ghcr.io/bootcrew/ubuntu-bootc:latest
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install X13s support packages
+RUN --mount=type=tmpfs,dst=/tmp apt update -y && \
+    apt install -y bluez && \
+    apt clean -y
+
+# Add dmsquash-live dracut module for live ISO boot.
+# Ubuntu's dracut package doesn't include live modules — fetch from upstream.
+RUN --mount=type=tmpfs,dst=/tmp \
+    apt update -y && apt install -y git && \
+    git clone --depth=1 --filter=blob:none --sparse \
+        https://github.com/dracut-ng/dracut-ng.git /tmp/dracut-ng && \
+    cd /tmp/dracut-ng && \
+    git sparse-checkout set modules.d/90dmsquash-live modules.d/90dmsquash-live-autooverlay modules.d/90dmsquash-live-ntfs && \
+    cp -r modules.d/90dmsquash-live /usr/lib/dracut/modules.d/ && \
+    cp -r modules.d/90dmsquash-live-autooverlay /usr/lib/dracut/modules.d/ 2>/dev/null || true && \
+    apt purge -y git && apt autoremove -y && apt clean -y
+
+# Dracut config for X13s firmware in initrd (Ubuntu uses .zst, not .mbn.xz)
+RUN mkdir -p /etc/dracut.conf.d && \
+    echo 'install_items+=" /usr/lib/firmware/qcom/sc8280xp/LENOVO/21BX/qcadsp8280.mbn.zst /usr/lib/firmware/qcom/sc8280xp/LENOVO/21BX/qcdxkmsuc8280.mbn.zst /usr/lib/firmware/qcom/sc8280xp/LENOVO/21BX/qccdsp8280.mbn.zst /usr/lib/firmware/qcom/sc8280xp/LENOVO/21BX/qcslpi8280.mbn.zst "' \
+    > /etc/dracut.conf.d/x13s.conf
+
+# Rebuild initramfs with live boot support + X13s firmware
+RUN kernel=$(ls /usr/lib/modules/ | sort -V | tail -1) && \
+    dracut --force --zstd --no-hostonly \
+        --add "dmsquash-live dmsquash-live-autooverlay" \
+        "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}"
+
+# Kernel arguments for X13s
+RUN mkdir -p /usr/lib/bootc/kargs.d && \
+    echo 'kargs = ["arm64.nopauth", "clk_ignore_unused", "pd_ignore_unused", "modprobe.blacklist=qcom_q6v5_pas", "efi=noruntime"]' \
+    > /usr/lib/bootc/kargs.d/01-x13s.toml
+
+LABEL containers.bootc 1
