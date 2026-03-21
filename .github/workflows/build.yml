@@ -150,14 +150,13 @@ jobs:
           # Create modified ISO:
           #   -boot_image any replay  — preserves El Torito boot catalog from input
           #   -update                 — replaces grub.cfg on ISO root
-          #   -add (with -pathspecs)  — injects DTB into ISO root at /dtb/qcom/
+          #   -map                    — injects DTB into ISO root at /dtb/qcom/
           sudo xorriso \
             -indev "$ISO" \
             -outdev /tmp/bonito-x13s-latest.iso \
             -boot_image any replay \
             -update /tmp/grub-patched.cfg /EFI/BOOT/grub.cfg \
-            -pathspecs on \
-            -add /tmp/x13s.dtb=/dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb \
+            -map /tmp/x13s.dtb /dtb/qcom/sc8280xp-lenovo-thinkpad-x13s.dtb \
             --
 
           echo "=== Modified ISO: $(ls -lh /tmp/bonito-x13s-latest.iso) ==="
