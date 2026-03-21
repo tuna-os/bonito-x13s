@@ -8,7 +8,8 @@ set -euxo pipefail
 
 IMAGE="${1:?Usage: $0 <container-image> [output.iso]}"
 OUTPUT="${2:-bonito-x13s-latest.iso}"
-LABEL="Bonito-X13s-Live"
+LABEL="${3:-Bonito-X13s-Live}"
+TITLE="${LABEL//-/ }"
 WORKDIR=$(mktemp -d)
 trap "rm -rf $WORKDIR" EXIT
 
@@ -73,19 +74,28 @@ ls -lh "$WORKDIR/boot/"
 
 # --- 2. Export container rootfs and create squashfs ---
 
-echo "=== Exporting container rootfs ==="
-ROOTFS="$WORKDIR/rootfs"
-mkdir -p "$ROOTFS"
-CONTAINER=$(podman create "$IMAGE" /bin/sh)
-podman export "$CONTAINER" | tar -C "$ROOTFS" -xf -
-podman rm "$CONTAINER"
-
+echo "=== Creating squashfs from container rootfs ==="
+# Use podman mount for direct overlay access — avoids pipe-induced corruption
+# from 'podman export | tar'. Use lz4 compression for reliability and fast
+# live-boot decompression.
 mkdir -p "$WORKDIR/iso/LiveOS"
+CONTAINER=$(podman create "$IMAGE" /bin/sh)
+ROOTFS_MOUNT=$(podman mount "$CONTAINER")
 echo "=== Creating squashfs (this takes a few minutes) ==="
-mksquashfs "$ROOTFS" "$WORKDIR/iso/LiveOS/squashfs.img" \
-    -comp zstd -b 131072 -no-progress
-rm -rf "$ROOTFS"
+mksquashfs "$ROOTFS_MOUNT" "$WORKDIR/iso/LiveOS/squashfs.img" \
+    -comp lz4 -b 131072 -no-progress \
+    -e proc -e sys -e dev -e run -e tmp
+podman umount "$CONTAINER"
+podman rm "$CONTAINER"
 echo "Squashfs: $(ls -lh "$WORKDIR/iso/LiveOS/squashfs.img")"
+
+echo "=== Verifying squashfs integrity ==="
+VERDIR=$(mktemp -d)
+unsquashfs -no-progress -n -d "$VERDIR" \
+    "$WORKDIR/iso/LiveOS/squashfs.img" \
+    'usr/bin/bash' 'usr/bin/sh' 'usr/lib/systemd/systemd' 2>&1 | tail -5
+rm -rf "$VERDIR"
+echo "Squashfs verification: OK"
 
 # --- 3. Create ISO directory structure ---
 
@@ -109,7 +119,7 @@ beep on
 EOF
 
 cat > "$WORKDIR/iso/loader/entries/bonito-x13s.conf" << EOF
-title      Bonito X13s Live (GNOME)
+title      $TITLE
 sort-key   01
 linux      /boot/aarch64/vmlinuz
 initrd     /boot/aarch64/initramfs.img
@@ -118,7 +128,7 @@ options    root=live:CDLABEL=$LABEL rd.live.image rd.live.overlay.thin efi=norun
 EOF
 
 cat > "$WORKDIR/iso/loader/entries/bonito-x13s-troubleshoot.conf" << EOF
-title      Bonito X13s Live (troubleshooting)
+title      $TITLE (troubleshooting)
 sort-key   02
 linux      /boot/aarch64/vmlinuz
 initrd     /boot/aarch64/initramfs.img

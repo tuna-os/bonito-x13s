@@ -19,7 +19,7 @@ echo "=== X13s setup for kernel ${KERNEL} ==="
 if command -v dnf &>/dev/null; then
     echo "--- Package manager: dnf (Fedora/RHEL) ---"
     dnf -y copr enable jlinton/x13s
-    dnf -y install x13s pd-mapper bluez dracut dracut-live qcom-firmware
+    dnf -y install x13s pd-mapper bluez dracut dracut-live qcom-firmware systemd-ukify
     dnf clean all
 
 elif command -v apt-get &>/dev/null; then
@@ -118,7 +118,41 @@ cat > /etc/systemd/system/bluetooth.service.d/x13s.conf << 'EOF'
 ExecStartPre=/bin/sleep 1
 EOF
 
-# ── 4. Rebuild initramfs ──────────────────────────────────────────────────────
+# ── 4. Composefs backend: remove bootupd, install systemd-boot ───────────────
+# bootc auto-selects the composefs backend (systemd-boot + UKI) when:
+#   1. /boot/EFI/BOOT/BOOTAA64.EFI is present in the image
+#   2. A UKI exists at /boot/EFI/Linux/ (built in section 6 below)
+#   3. bootupd is NOT installed
+# With composefs, 'bootc install to-disk' sets up systemd-boot and
+# auto-discovers the UKI — the DTB embedded in the UKI makes the X13s boot
+# without any post-install BLS patching.
+# Reference: https://bootc-dev.github.io/bootc/bootloaders.html
+
+if command -v dnf &>/dev/null; then
+    # Prefer dnf remove; fall back to rpm --nodeps if bootupd is protected
+    dnf -y remove bootupd 2>/dev/null || \
+        rpm -e --nodeps bootupd 2>/dev/null || \
+        echo "WARNING: Could not remove bootupd — composefs backend may not activate"
+fi
+
+# Install systemd-boot EFI binary into the image
+SDBOOT_SRC=$(find /usr/lib/systemd/boot/efi /usr/share/systemd-boot/efi \
+    -name "systemd-bootaa64.efi" 2>/dev/null | head -1 || true)
+if [ -n "$SDBOOT_SRC" ]; then
+    mkdir -p /boot/EFI/BOOT /boot/EFI/systemd
+    cp "$SDBOOT_SRC" /boot/EFI/BOOT/BOOTAA64.EFI
+    cp "$SDBOOT_SRC" /boot/EFI/systemd/systemd-bootaa64.efi
+    echo "systemd-boot installed at /boot/EFI/"
+else
+    echo "WARNING: systemd-bootaa64.efi not found — composefs/systemd-boot unavailable"
+fi
+
+mkdir -p /boot/loader
+cat > /boot/loader/loader.conf << 'EOF'
+timeout 5
+EOF
+
+# ── 5. Rebuild initramfs ──────────────────────────────────────────────────────
 # Include dmsquash-live so this single image works both as a bootc target
 # (bootc switch) and as input to make-systemd-boot-iso.sh for live ISO builds.
 echo "--- Rebuilding initramfs (kernel ${KERNEL}) ---"
@@ -127,5 +161,36 @@ DRACUT_NO_XATTR=1 dracut --force --zstd --no-hostonly \
     --add "dmsquash-live" \
     "/usr/lib/modules/${KERNEL}/initramfs.img" "${KERNEL}" \
     || echo "WARNING: dracut rebuild failed — using existing initramfs"
+
+# ── 6. Build UKI with embedded X13s DTB ──────────────────────────────────────
+# The UKI at /boot/EFI/Linux/ is the third composefs condition (alongside
+# systemd-boot and no bootupd). It embeds: kernel + initramfs + DTB + cmdline.
+# systemd-boot auto-discovers it — no BLS 'devicetree' directive required.
+# With composefs, plain 'bootc install to-disk /dev/nvme0n1' works on X13s.
+echo "--- Building UKI with embedded DTB ---"
+BOARD="sc8280xp-lenovo-thinkpad-x13s"
+DTB_PATH=$(find \
+    "/usr/lib/modules/${KERNEL}/dtb/qcom" \
+    "/usr/lib/firmware/${KERNEL}/device-tree/qcom" \
+    /usr/lib/firmware/qcom \
+    -name "${BOARD}.dtb" 2>/dev/null | head -1 || true)
+[ -z "$DTB_PATH" ] && \
+    DTB_PATH=$(find /usr/lib -name "${BOARD}.dtb" 2>/dev/null | head -1 || true)
+
+if [ -n "$DTB_PATH" ] && command -v ukify &>/dev/null; then
+    mkdir -p /boot/EFI/Linux
+    ukify build \
+        --linux          "/usr/lib/modules/${KERNEL}/vmlinuz" \
+        --initrd         "/usr/lib/modules/${KERNEL}/initramfs.img" \
+        --devicetree     "$DTB_PATH" \
+        --cmdline        "arm64.nopauth clk_ignore_unused pd_ignore_unused efi=noruntime rw" \
+        --os-release     "@/etc/os-release" \
+        --output         "/boot/EFI/Linux/x13s-${KERNEL}.efi"
+    echo "UKI: $(ls -lh /boot/EFI/Linux/x13s-${KERNEL}.efi)"
+    echo "composefs backend active — 'bootc install to-disk' will use systemd-boot"
+else
+    [ -z "$DTB_PATH" ] && echo "WARNING: X13s DTB not found — skipping UKI build"
+    command -v ukify &>/dev/null || echo "WARNING: ukify not available — skipping UKI build"
+fi
 
 echo "=== X13s setup complete ==="

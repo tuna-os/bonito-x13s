@@ -23,11 +23,13 @@ jobs:
             base_image: ghcr.io/tuna-os/bonito:gnome
             image_ref: ghcr.io/tuna-os/bonito-x13s
             iso_name: bonito-x13s-latest.iso
+            iso_label: Bonito-X13s-Live
 
           - name: ubuntu
             base_image: ghcr.io/bootcrew/ubuntu-bootc:latest
             image_ref: ghcr.io/tuna-os/ubuntu-x13s
             iso_name: ubuntu-x13s-latest.iso
+            iso_label: Ubuntu-X13s-Live
 
     steps:
       - name: Checkout
@@ -35,7 +37,7 @@ jobs:
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io --username ${{ github.actor }} --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io --username ${{ github.actor }} --password-stdin
 
       - name: Build X13s image (${{ matrix.name }})
         run: |
@@ -49,8 +51,8 @@ jobs:
       - name: Push to GHCR
         if: github.event_name != 'pull_request'
         run: |
-          podman push ${{ matrix.image_ref }}:latest
-          podman push ${{ matrix.image_ref }}:${{ github.sha }}
+          sudo podman push ${{ matrix.image_ref }}:latest
+          sudo podman push ${{ matrix.image_ref }}:${{ github.sha }}
 
       - name: Install ISO build dependencies
         if: github.event_name != 'pull_request'
@@ -62,7 +64,8 @@ jobs:
           mkdir -p output
           sudo src/make-systemd-boot-iso.sh \
             ${{ matrix.image_ref }}:latest \
-            output/${{ matrix.iso_name }}
+            output/${{ matrix.iso_name }} \
+            "${{ matrix.iso_label }}"
 
       - name: Verify ISO contents
         if: github.event_name != 'pull_request'
