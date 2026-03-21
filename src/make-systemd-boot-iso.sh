@@ -114,7 +114,7 @@ sort-key   01
 linux      /boot/aarch64/vmlinuz
 initrd     /boot/aarch64/initramfs.img
 devicetree /boot/aarch64/x13s.dtb
-options    root=live:CDLABEL=$LABEL rd.live.image rd.live.overlay.thin efi=noruntime arm64.nopauth clk_ignore_unused pd_ignore_unused modprobe.blacklist=qcom_q6v5_pas enforcing=0 quiet
+options    root=live:CDLABEL=$LABEL rd.live.image rd.live.overlay.thin efi=noruntime arm64.nopauth clk_ignore_unused pd_ignore_unused enforcing=0 quiet
 EOF
 
 cat > "$WORKDIR/iso/loader/entries/bonito-x13s-troubleshoot.conf" << EOF
@@ -123,7 +123,7 @@ sort-key   02
 linux      /boot/aarch64/vmlinuz
 initrd     /boot/aarch64/initramfs.img
 devicetree /boot/aarch64/x13s.dtb
-options    root=live:CDLABEL=$LABEL rd.live.image efi=noruntime arm64.nopauth clk_ignore_unused pd_ignore_unused modprobe.blacklist=qcom_q6v5_pas enforcing=0 rd.shell
+options    root=live:CDLABEL=$LABEL rd.live.image efi=noruntime arm64.nopauth clk_ignore_unused pd_ignore_unused enforcing=0 rd.shell
 EOF
 
 # --- 4. Create EFI boot image (FAT) ---
