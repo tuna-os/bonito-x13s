@@ -2,20 +2,32 @@ name: Build, Push, and Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, universal]
   pull_request:
-    branches: [main]
+    branches: [main, universal]
   workflow_dispatch:
-
-env:
-  IMAGE_REF: ghcr.io/tuna-os/bonito-x13s
 
 jobs:
   build:
+    name: Build (${{ matrix.name }})
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: bonito
+            base_image: ghcr.io/tuna-os/bonito:gnome
+            image_ref: ghcr.io/tuna-os/bonito-x13s
+            iso_name: bonito-x13s-latest.iso
+
+          - name: ubuntu
+            base_image: ghcr.io/bootcrew/ubuntu-bootc:latest
+            image_ref: ghcr.io/tuna-os/ubuntu-x13s
+            iso_name: ubuntu-x13s-latest.iso
 
     steps:
       - name: Checkout
@@ -25,75 +37,53 @@ jobs:
         if: github.event_name != 'pull_request'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io --username ${{ github.actor }} --password-stdin
 
-      - name: Build base bootc image
+      - name: Build X13s image (${{ matrix.name }})
         run: |
-          podman build \
-            -t ${{ env.IMAGE_REF }}:latest \
-            -t ${{ env.IMAGE_REF }}:${{ github.sha }} \
+          sudo podman build \
+            --cap-add sys_admin --security-opt label=disable \
+            --build-arg BASE_IMAGE=${{ matrix.base_image }} \
+            -t ${{ matrix.image_ref }}:latest \
+            -t ${{ matrix.image_ref }}:${{ github.sha }} \
             -f Containerfile .
 
       - name: Push to GHCR
         if: github.event_name != 'pull_request'
         run: |
-          podman push ${{ env.IMAGE_REF }}:latest
-          podman push ${{ env.IMAGE_REF }}:${{ github.sha }}
-
-  build-iso:
-    runs-on: ubuntu-24.04-arm
-    needs: build
-    if: github.event_name != 'pull_request'
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+          podman push ${{ matrix.image_ref }}:latest
+          podman push ${{ matrix.image_ref }}:${{ github.sha }}
 
       - name: Install ISO build dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q squashfs-tools mtools dosfstools xorriso rclone
-
-      - name: Build base bootc image
-        run: |
-          sudo podman build \
-            -t localhost/bonito-x13s:latest \
-            -f Containerfile .
-
-      - name: Build ISO installer image (adds dracut-live initramfs)
-        run: |
-          sudo podman build \
-            --cap-add sys_admin --security-opt label=disable \
-            -t localhost/bonito-x13s-installer:latest \
-            -f Containerfile.iso .
+        if: github.event_name != 'pull_request'
+        run: sudo apt-get update -q && sudo apt-get install -y -q squashfs-tools mtools dosfstools xorriso rclone
 
       - name: Build systemd-boot ISO
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p output
           sudo src/make-systemd-boot-iso.sh \
-            localhost/bonito-x13s-installer:latest \
-            output/bonito-x13s-latest.iso
+            ${{ matrix.image_ref }}:latest \
+            output/${{ matrix.iso_name }}
 
       - name: Verify ISO contents
+        if: github.event_name != 'pull_request'
         run: |
           MOUNT=$(mktemp -d)
-          sudo mount -o loop,ro output/bonito-x13s-latest.iso "$MOUNT"
-          echo "=== ISO root ==="
-          find "$MOUNT" -maxdepth 3 -not -path "*/LiveOS/*"
+          sudo mount -o loop,ro output/${{ matrix.iso_name }} "$MOUNT"
           echo "=== Loader config ==="
           cat "$MOUNT/loader/loader.conf" 2>/dev/null || echo "(none)"
           echo "=== Boot entry ==="
           cat "$MOUNT/loader/entries/bonito-x13s.conf" 2>/dev/null || echo "(none)"
-          echo "=== DTB present ==="
-          find "$MOUNT" -name "*.dtb" 2>/dev/null
           echo "=== Boot files ==="
           ls -lh "$MOUNT/boot/aarch64/" 2>/dev/null || echo "(none)"
           echo "=== Squashfs ==="
           ls -lh "$MOUNT/LiveOS/" 2>/dev/null || echo "(none)"
+          echo "=== DTBs ==="
+          find "$MOUNT" -name "*.dtb" 2>/dev/null
           sudo umount "$MOUNT"
           rmdir "$MOUNT"
 
       - name: Upload ISO to Cloudflare R2
+        if: github.event_name != 'pull_request'
         env:
           RCLONE_CONFIG_R2_TYPE: s3
           RCLONE_CONFIG_R2_PROVIDER: Cloudflare
@@ -101,45 +91,6 @@ jobs:
           RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
-          rclone copyto "output/bonito-x13s-latest.iso" \
-            "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-latest.iso" --progress
+          rclone copyto "output/${{ matrix.iso_name }}" \
+            "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/${{ matrix.iso_name }}" --progress
 
-  build-ubuntu-iso:
-    runs-on: ubuntu-24.04-arm
-    if: github.event_name != 'pull_request'
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install ISO build dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q squashfs-tools mtools dosfstools xorriso rclone
-
-      - name: Build Ubuntu bootc image for X13s
-        run: |
-          sudo podman build \
-            --cap-add sys_admin --security-opt label=disable \
-            -t localhost/bonito-x13s-ubuntu:latest \
-            -f Containerfile.ubuntu .
-
-      - name: Build systemd-boot ISO (Ubuntu)
-        run: |
-          mkdir -p output
-          sudo src/make-systemd-boot-iso.sh \
-            localhost/bonito-x13s-ubuntu:latest \
-            output/bonito-x13s-ubuntu-latest.iso
-
-      - name: Upload Ubuntu ISO to Cloudflare R2
-        env:
-          RCLONE_CONFIG_R2_TYPE: s3
-          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-        run: |
-          rclone copyto "output/bonito-x13s-ubuntu-latest.iso" \
-            "r2:${{ secrets.R2_BUCKET }}/bonito-x13s/bonito-x13s-ubuntu-latest.iso" --progress
