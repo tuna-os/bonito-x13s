@@ -45,14 +45,10 @@ elif command -v apt-get &>/dev/null; then
     if [ ! -d /usr/lib/dracut/modules.d/90dmsquash-live ]; then
         echo "Fetching dmsquash-live from dracut-ng..."
         DEBIAN_FRONTEND=noninteractive apt-get install -y git
-        git clone --depth=1 --filter=blob:none --sparse \
+        git clone --depth=1 --no-tags \
             https://github.com/dracut-ng/dracut-ng.git /tmp/dracut-ng
-        cd /tmp/dracut-ng
-        git sparse-checkout set \
-            modules.d/90dmsquash-live \
-            modules.d/90dmsquash-live-autooverlay
-        cp -r modules.d/90dmsquash-live /usr/lib/dracut/modules.d/
-        cp -r modules.d/90dmsquash-live-autooverlay \
+        cp -r /tmp/dracut-ng/modules.d/90dmsquash-live /usr/lib/dracut/modules.d/
+        cp -r /tmp/dracut-ng/modules.d/90dmsquash-live-autooverlay \
               /usr/lib/dracut/modules.d/ 2>/dev/null || true
         cd /
         rm -rf /tmp/dracut-ng
