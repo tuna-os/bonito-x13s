@@ -40,7 +40,9 @@ elif command -v apt-get &>/dev/null; then
             >> /var/lib/dpkg/status
     fi
     apt-get update -y
-    apt-get install -y bluez dracut-core
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        -o Dpkg::Options::="--force-confold" \
+        bluez dracut-core
     apt-get clean -y
 
     # Ubuntu's dracut lacks dmsquash-live — fetch just that module from upstream
