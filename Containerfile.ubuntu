@@ -6,13 +6,16 @@ FROM ghcr.io/bootcrew/ubuntu-bootc:latest
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Install X13s support packages
-RUN --mount=type=tmpfs,dst=/tmp apt update -y && \
+RUN --mount=type=tmpfs,dst=/tmp \
+    mkdir -p /var/lib/apt/lists/partial && \
+    apt update -y && \
     apt install -y bluez && \
     apt clean -y
 
 # Add dmsquash-live dracut module for live ISO boot.
 # Ubuntu's dracut package doesn't include live modules — fetch from upstream.
 RUN --mount=type=tmpfs,dst=/tmp \
+    mkdir -p /var/lib/apt/lists/partial && \
     apt update -y && apt install -y git && \
     git clone --depth=1 --filter=blob:none --sparse \
         https://github.com/dracut-ng/dracut-ng.git /tmp/dracut-ng && \
